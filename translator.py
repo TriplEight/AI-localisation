@@ -31,7 +31,7 @@ class Translator:
     def __init__(self, api_key):
         self.client = openai.OpenAI(api_key=api_key)
 
-    def translate(self, text, target_language, strict_words=None, use_cache=False, cache_file="translations_cache.json"):
+    def translate(self, text, target_language, strict_words=None, use_cache=False, cache_file="translations_cache.json", additional_prompt=None):
         strict_words = strict_words or {}
         cache = Cache(cache_file) if use_cache else None
 
@@ -44,6 +44,10 @@ class Translator:
         # Prepare the translation prompt
         strict_words_prompt = ', '.join([f"'{word}': '{translation}'" for word, translation in strict_words.items()])
         system_prompt = f"Translate the following text to {target_language}. Use the following translations for specific words: {strict_words_prompt}."
+
+        if additional_prompt:
+            system_prompt += f" {additional_prompt}"
+
         user_prompt = f"Text: {text}\n\nTranslated Text:"
 
         # Call the OpenAI API using the new syntax
