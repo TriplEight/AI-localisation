@@ -9,6 +9,7 @@ import shutil
 import pypandoc
 from translator import Translator
 import json
+from aisystant import Aisystant
 
 # Configure logging
 log_level = os.getenv('LOG_LEVEL', 'INFO').upper()
@@ -30,54 +31,6 @@ def load_strict_words(file_path="strict_words.json"):
         with open(file_path, 'r', encoding='utf-8') as f:
             return json.load(f)
     return {}
-
-class Aisystant:
-    def __init__(self, api_token):
-        self.api_token = api_token
-        self.base_url = 'https://api.aisystant.com/api'
-        self.headers = {'Session-Token': api_token}
-
-    def get(self, path, **kwargs):
-        logger.debug(f"Sending GET request to {self.base_url}/{path} with headers {self.headers}")
-        response = requests.get(f'{self.base_url}/{path}', headers=self.headers, **kwargs)
-        response.raise_for_status()
-        return response.json()
-
-    def get_course(self, product_code):
-        logger.info(f"Fetching course with product code: {product_code}")
-        courses = self.get('courses/courses')
-        for course in courses:
-            if course['productCode'] == product_code:
-                logger.debug(f"Found course: {course}")
-                return course
-        logger.warning(f"Course with product code {product_code} not found.")
-        return None
-
-    def get_course_version(self, course_version_id):
-        logger.info(f"Fetching course version with ID: {course_version_id}")
-        return self.get(f'courses/course-versions/{course_version_id}')
-
-    def start_course(self, course_version_id):
-        logger.info(f"Starting course version with ID: {course_version_id}")
-        response = requests.post(f'{self.base_url}/courses/start/{course_version_id}', headers=self.headers)
-        response.raise_for_status()
-
-    def get_passing_id(self, course_version_id):
-        logger.info(f"Fetching passing ID for course version ID: {course_version_id}")
-        passings = self.get('courses/courses-passing')
-        for passing in passings:
-            if passing["courseVersionId"] == course_version_id:
-                logger.debug(f"Found passing ID: {passing['id']}")
-                return passing["id"]
-        logger.warning(f"No passing ID found for course version ID: {course_version_id}")
-        return None
-
-    def load_section(self, section_id, passing_id):
-        logger.info(f"Loading section {section_id} for passing ID: {passing_id}")
-        url = f"{self.base_url}/courses/text/{section_id}?course-passing={passing_id}"
-        response = requests.get(url, headers=self.headers)
-        response.raise_for_status()
-        return response.content.decode('utf-8', errors='replace')
 
 def save_markdown(directory, filename, frontmatter, text):
     logger.info(f"Saving markdown file: {os.path.join(directory, filename)}")
@@ -114,7 +67,7 @@ def process_footnotes_in_html(html_content):
     )
 
     # Заменяем HTML сноски на маркеры
-    return re.sub(footnote_pattern, r"${begin_comment}\3${end_comment}", html_content)
+    return re.sub(footnote_pattern, r"{{{begincomment}}}\3{{{endcomment}}}", html_content)
 
 def convert_html_to_markdown(html):
     logger.debug("Converting HTML to Markdown")
@@ -126,7 +79,7 @@ def convert_html_to_markdown(html):
     markdown_text = pypandoc.convert_text(html, 'md', format='html')
 
     # Replace the custom markers with actual footnote syntax in Markdown
-    markdown_text = markdown_text.replace("${begin_comment}", "[^").replace("${end_comment}", "]")
+    markdown_text = markdown_text.replace("{{{begincomment}}}", "^[").replace("{{{endcomment}}}", "]")
 
     # Optionally, add a new line between footnotes for clarity
     markdown_text = re.sub(r'(\[\^\d+\]: .+?)(\[\^\d+\]: )', r'\1\n\n\2', markdown_text)
@@ -175,20 +128,34 @@ def download_course(course_name):
             section_counter = 0  # Reset section counter for new chapter
             translated_title = translator.translate(section['title'], "English", strict_words, use_cache=True)
             logger.debug(f"Translated title for chapter: {translated_title}")
-            parent_directory = f"{chapter_counter:02d}-{clean_slug(slugify.slugify(translated_title))}"
+
+            # If chapter counter > 1, create a directory for the new chapter
+            if chapter_counter > 1:
+                parent_directory = f"{chapter_counter:02d}-{clean_slug(slugify.slugify(translated_title))}"
+            else:
+                # First sections go to the root
+                parent_directory = ""
 
         if section["type"] == "TEXT":
             section_counter += 1
-            directory = os.path.join("ru", parent_directory)
+
+            # If parent_directory is empty, save in the root directory
+            if parent_directory:
+                directory = os.path.join("ru", parent_directory)
+            else:
+                directory = "ru"
+
             translated_title = translator.translate(section['title'], "English", strict_words, use_cache=True)
             logger.debug(f"Translated title for section: {translated_title}")
             section_slug = f"{section_counter:02d}-{clean_slug(slugify.slugify(translated_title))}"
             filename = f"{section_slug}.md"
             text = aisystant.load_section(section["id"], passing_id)
+
             # Use the original title in the frontmatter
             frontmatter = {"title": section['title']}
             text = process_images_in_html(text, "https://aisystant.system-school.ru", directory, section_slug)
             text = convert_html_to_markdown(text)  # Convert HTML to Markdown
+
             save_markdown(directory, filename, frontmatter, text)
 
 if __name__ == "__main__":

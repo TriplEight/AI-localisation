@@ -41,18 +41,24 @@ class Translator:
             if cached_translation:
                 return cached_translation
 
-        # Prepare the translation prompt
+        # Prepare the translation prompt with strict words
         strict_words_prompt = ', '.join([f"'{word}': '{translation}'" for word, translation in strict_words.items()])
-        system_prompt = f"Translate the following text to {target_language}. Use the following translations for specific words: {strict_words_prompt}."
+        
+        # Modify the system prompt to prevent unnecessary texts
+        system_prompt = (
+            f"Translate the following text to {target_language}, ensuring the translation is exact and concise. "
+            f"Only provide the translated text, without any explanations, introductions, or additional phrases. "
+            f"Use the following translations for specific words: {strict_words_prompt}."
+        )
 
         if additional_prompt:
             system_prompt += f" {additional_prompt}"
 
         user_prompt = f"Text: {text}\n\nTranslated Text:"
 
-        # Call the OpenAI API using the new syntax
+        # Call the OpenAI API using the modern model (e.g., gpt-4)
         response = self.client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model="gpt-4o",  # Updated to use GPT-4 model
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
