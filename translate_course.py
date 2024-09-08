@@ -2,31 +2,22 @@ import os
 import logging
 from git import Repo
 from translator import Translator
-import glob
-import shutil
 
 # Configuring logging
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"),
                     format='%(asctime)s - %(levelname)s - %(message)s')
 
-def get_changed_files(commit_hash=None):
-    if commit_hash:
-        logging.info(f"Getting changed files for commit: {commit_hash}")
-        try:
-            repo = Repo(".")  # Use the current directory as the repository path
-            commit = repo.commit(commit_hash)
-            changes = commit.stats.files
-            logging.info(f"Changed files: {list(changes.keys())}")
-            return changes
-        except Exception as e:
-            logging.exception(f"Exception occurred while getting changed files: {e}")
-            return {}
-    else:
-        logging.info("No commit hash provided. Processing all files in 'ru/'")
-        files = glob.glob('ru/**/*', recursive=True)
-        changes = {file: {"lines": 1} for file in files if os.path.isfile(file)}  # Only files
-        logging.info(f"All 'ru/' files: {list(changes.keys())}")
+def get_changed_files(commit_hash):
+    logging.info(f"Getting changed files for commit: {commit_hash}")
+    try:
+        repo = Repo(".")  # Use the current directory as the repository path
+        commit = repo.commit(commit_hash)
+        changes = commit.stats.files
+        logging.info(f"Changed files: {list(changes.keys())}")
         return changes
+    except Exception as e:
+        logging.exception(f"Exception occurred while getting changed files: {e}")
+        return {}
 
 def process_files(changes, target_language, translator):
     for file_path, stats in changes.items():
@@ -37,7 +28,6 @@ def process_files(changes, target_language, translator):
 
         new_file_path = file_path.replace('ru/', f'{target_language}/')
 
-        # Process markdown files with translation, other files are just copied
         if file_path.endswith('.md'):
             translate_markdown(file_path, new_file_path, target_language, translator)
         else:
@@ -50,6 +40,7 @@ def translate_markdown(file_path, new_file_path, target_language, translator):
 
         logging.debug(f"Original content (first 100 chars): {content[:100]}...")
 
+        # Add the additional prompt about Markdown and frontmatter
         additional_prompt = (
             "The provided text is a Markdown document. "
             "It's important to preserve the formatting, including headers, lists, and code blocks. "
@@ -57,8 +48,9 @@ def translate_markdown(file_path, new_file_path, target_language, translator):
             "Translate only the values in the frontmatter, not the keys."
         )
 
+        # Using the translator with caching enabled and specifying the cache file
         translated_content = translator.translate(
-            content, target_language, use_cache=True, additional_prompt=additional_prompt
+            content, target_language, use_cache=True, cache_file="md_cache.json", additional_prompt=additional_prompt
         )
 
         os.makedirs(os.path.dirname(new_file_path), exist_ok=True)
@@ -73,7 +65,9 @@ def translate_markdown(file_path, new_file_path, target_language, translator):
 def copy_file(file_path, new_file_path):
     try:
         os.makedirs(os.path.dirname(new_file_path), exist_ok=True)
-        shutil.copy(file_path, new_file_path)
+        with open(file_path, 'rb') as src_file:
+            with open(new_file_path, 'wb') as dest_file:
+                dest_file.write(src_file.read())
         logging.info(f"Copied {file_path} -> {new_file_path}")
     except Exception as e:
         logging.exception(f"Exception occurred while copying file {file_path}: {e}")
@@ -81,12 +75,15 @@ def copy_file(file_path, new_file_path):
 if __name__ == "__main__":
     import sys
 
-    if len(sys.argv) < 2:
-        logging.error("Usage: python script.py <target_language> [<commit_hash>]")
+    if len(sys.argv) == 2:
+        target_language = sys.argv[1]
+        commit_hash = None  # Process all files if no commit hash is provided
+    elif len(sys.argv) == 3:
+        target_language = sys.argv[1]
+        commit_hash = sys.argv[2]
+    else:
+        logging.error("Usage: python script.py <target_language> [commit_hash]")
         sys.exit(1)
-
-    target_language = sys.argv[1]
-    commit_hash = sys.argv[2] if len(sys.argv) > 2 else None
 
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
@@ -95,7 +92,10 @@ if __name__ == "__main__":
 
     translator = Translator(api_key)
 
-    changed_files = get_changed_files(commit_hash)
+    if commit_hash:
+        changed_files = get_changed_files(commit_hash)
+    else:
+        changed_files = {os.path.join(root, file): None for root, dirs, files in os.walk('ru') for file in files}
 
     if not changed_files:
         logging.warning("No files to process.")
