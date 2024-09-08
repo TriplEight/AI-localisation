@@ -60,14 +60,20 @@ def process_images_in_html(html, base_url, directory, prefix):
     return html
 
 def process_footnotes_in_html(html_content):
-    # Шаблон для поиска сносок
+    # Regex pattern to extract footnotes
     footnote_pattern = re.compile(
         r'<span class="sspopup" onclick="document\.getElementById\(\'(.+?)\'\)\.classList\.toggle\(\'show\'\)\">'
         r'<sup>(\d+)</sup><span class="sspopuptext" id="\1">\[x\] (.+?)</span></span>'
     )
 
-    # Заменяем HTML сноски на маркеры
+    # Replace footnotes with custom markers
     return re.sub(footnote_pattern, r"{{{begincomment}}}\3{{{endcomment}}}", html_content)
+
+def clean_markdown_text(text):
+    # Remove unnecessary ::: blocks and their contents
+    text = re.sub(r':::\s*\{[^}]*\}', '', text)  # Removes ::: {style="..."}
+    text = re.sub(r':::', '', text)  # Removes remaining :::
+    return text
 
 def convert_html_to_markdown(html):
     logger.debug("Converting HTML to Markdown")
@@ -84,6 +90,9 @@ def convert_html_to_markdown(html):
     # Optionally, add a new line between footnotes for clarity
     markdown_text = re.sub(r'(\[\^\d+\]: .+?)(\[\^\d+\]: )', r'\1\n\n\2', markdown_text)
 
+    # Clean unnecessary block styles
+    markdown_text = clean_markdown_text(markdown_text)
+
     return markdown_text
 
 def clean_slug(slug):
@@ -92,7 +101,7 @@ def clean_slug(slug):
     return slug
 
 def remove_directory(directory):
-    if (os.path.exists(directory)):
+    if os.path.exists(directory):
         logger.info(f"Removing directory: {directory}")
         shutil.rmtree(directory)
     else:
@@ -118,28 +127,25 @@ def download_course(course_name):
     translator = Translator(api_key)
     strict_words = load_strict_words()
 
-    chapter_counter = 0  # Counter for chapters
-    section_counter = 0  # Counter for sections within a chapter
-    parent_directory = ""  # Start with an empty parent directory
+    chapter_counter = 0
+    section_counter = 0
+    parent_directory = ""
 
     for section in course_version["sections"]:
         if section["type"] == "HEADER" or chapter_counter == 0:
             chapter_counter += 1
-            section_counter = 0  # Reset section counter for new chapter
+            section_counter = 0
             translated_title = translator.translate(section['title'], "English", strict_words, use_cache=True)
             logger.debug(f"Translated title for chapter: {translated_title}")
 
-            # If chapter counter > 1, create a directory for the new chapter
             if chapter_counter > 1:
                 parent_directory = f"{chapter_counter:02d}-{clean_slug(slugify.slugify(translated_title))}"
             else:
-                # First sections go to the root
                 parent_directory = ""
 
         if section["type"] == "TEXT":
             section_counter += 1
 
-            # If parent_directory is empty, save in the root directory
             if parent_directory:
                 directory = os.path.join("ru", parent_directory)
             else:
@@ -151,10 +157,9 @@ def download_course(course_name):
             filename = f"{section_slug}.md"
             text = aisystant.load_section(section["id"], passing_id)
 
-            # Use the original title in the frontmatter
             frontmatter = {"title": section['title']}
             text = process_images_in_html(text, "https://aisystant.system-school.ru", directory, section_slug)
-            text = convert_html_to_markdown(text)  # Convert HTML to Markdown
+            text = convert_html_to_markdown(text)
 
             save_markdown(directory, filename, frontmatter, text)
 
