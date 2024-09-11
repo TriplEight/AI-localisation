@@ -26,7 +26,7 @@ headers = {
 }
 
 # Load strict words from a static file if it exists
-def load_strict_words(file_path="strict_words.json"):
+def load_strict_words(file_path="_/strict_words.json"):
     if os.path.exists(file_path):
         with open(file_path, 'r', encoding='utf-8') as f:
             return json.load(f)

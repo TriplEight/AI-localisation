@@ -4,7 +4,7 @@ import os
 import json
 
 class Cache:
-    def __init__(self, cache_file="translations_cache.json"):
+    def __init__(self, cache_file="_/translations_cache.json"):
         self.cache_file = cache_file
         self.cache = self.load_cache()
 
@@ -31,7 +31,7 @@ class Translator:
     def __init__(self, api_key):
         self.client = openai.OpenAI(api_key=api_key)
 
-    def translate(self, text, target_language, strict_words=None, use_cache=False, cache_file="translations_cache.json", additional_prompt=None):
+    def translate(self, text, target_language, strict_words=None, use_cache=False, cache_file="_/translations_cache.json", additional_prompt=None):
         strict_words = strict_words or {}
         cache = Cache(cache_file) if use_cache else None
 

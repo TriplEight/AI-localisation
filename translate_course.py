@@ -9,7 +9,7 @@ logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"),
                     format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Load strict words from a JSON file
-def load_strict_words(file_path="strict_words.json"):
+def load_strict_words(file_path="_/strict_words.json"):
     if os.path.exists(file_path):
         with open(file_path, 'r', encoding='utf-8') as f:
             return json.load(f)
@@ -58,7 +58,7 @@ def translate_markdown(file_path, new_file_path, target_language, translator, st
 
         # Using the translator with caching enabled and specifying the cache file
         translated_content = translator.translate(
-            content, target_language, strict_words=strict_words, use_cache=True, cache_file="md_cache.json", additional_prompt=additional_prompt
+            content, target_language, strict_words=strict_words, use_cache=True, cache_file="_/md_cache.json", additional_prompt=additional_prompt
         )
 
         os.makedirs(os.path.dirname(new_file_path), exist_ok=True)
