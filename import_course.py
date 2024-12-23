@@ -27,12 +27,32 @@ headers = {
 
 # Load strict words from a static file if it exists
 def load_strict_words(file_path="_/strict_words.json"):
+    """
+    Loads a dictionary of strict words from a JSON file that should not be translated
+    or require specific translation rules.
+
+    Args:
+        file_path (str): Path to the JSON file containing strict words
+
+    Returns:
+        dict: Dictionary of strict words and their translations/rules.
+              Returns empty dict if file doesn't exist
+    """
     if os.path.exists(file_path):
         with open(file_path, 'r', encoding='utf-8') as f:
             return json.load(f)
     return {}
 
 def save_markdown(directory, filename, frontmatter, text):
+    """
+    Save the given text as a Markdown file with frontmatter.
+
+    Args:
+        directory (str): The directory where the file will be saved.
+        filename (str): The name of the Markdown file.
+        frontmatter (dict): A dictionary containing frontmatter data.
+        text (str): The content to be written to the Markdown file.
+    """
     logger.info(f"Saving markdown file: {os.path.join(directory, filename)}")
     os.makedirs(directory, exist_ok=True)
     with open(os.path.join(directory, filename), "w", encoding='utf-8') as f:
@@ -42,10 +62,22 @@ def save_markdown(directory, filename, frontmatter, text):
         f.write(text)
 
 def process_images_in_html(html, base_url, directory, prefix):
+    """
+    Download images from HTML content and save them to a specified directory.
+
+    Args:
+        html (str): The HTML content containing image tags.
+        base_url (str): The base URL to construct full image URLs.
+        directory (str): The directory where images will be saved.
+        prefix (str): A prefix to prepend to the image filenames.
+
+    Returns:
+        str: The modified HTML content with image paths updated to local filenames.
+    """
     logger.debug("Processing images in HTML content.")
     img_tags = re.findall(r'<img src="(/text/[^"]*)" alt="[^"]*">', html)
     os.makedirs(directory, exist_ok=True)
-    
+
     for img_tag in img_tags:
         full_url = base_url + img_tag
         new_filename = f"{prefix}-{os.path.basename(img_tag)}"
@@ -60,6 +92,15 @@ def process_images_in_html(html, base_url, directory, prefix):
     return html
 
 def process_footnotes_in_html(html_content):
+    """
+    Extract and replace footnotes in HTML content with custom markers.
+
+    Args:
+        html_content (str): The HTML content containing footnotes.
+
+    Returns:
+        str: The modified HTML content with footnotes replaced by custom markers.
+    """
     # Regex pattern to extract footnotes
     footnote_pattern = re.compile(
         r'<span class="sspopup" onclick="document\.getElementById\(\'(.+?)\'\)\.classList\.toggle\(\'show\'\)\">'
@@ -70,17 +111,35 @@ def process_footnotes_in_html(html_content):
     return re.sub(footnote_pattern, r"{{{begincomment}}}\3{{{endcomment}}}", html_content)
 
 def clean_markdown_text(text):
+    """
+    Clean unnecessary blocks from Markdown text.
+
+    Args:
+        text (str): The Markdown text to be cleaned.
+
+    Returns:
+        str: The cleaned Markdown text without unnecessary blocks.
+    """
     # Remove unnecessary ::: blocks and their contents
     text = re.sub(r':::\s*\{[^}]*\}', '', text)  # Removes ::: {style="..."}
     text = re.sub(r':::', '', text)  # Removes remaining :::
     return text
 
 def convert_html_to_markdown(html):
+    """
+    Convert HTML content to Markdown format.
+
+    Args:
+        html (str): The HTML content to be converted.
+
+    Returns:
+        str: The converted Markdown text.
+    """
     logger.debug("Converting HTML to Markdown")
-    
+
     # Process footnotes before converting HTML to Markdown
     html = process_footnotes_in_html(html)
-    
+
     # Use pypandoc to convert HTML to Markdown
     markdown_text = pypandoc.convert_text(html, 'md', format='html')
 
@@ -96,11 +155,26 @@ def convert_html_to_markdown(html):
     return markdown_text
 
 def clean_slug(slug):
+    """
+    Clean a slug by removing leading numbers followed by a hyphen.
+
+    Args:
+        slug (str): The slug to be cleaned.
+
+    Returns:
+        str: The cleaned slug.
+    """
     # Remove leading numbers followed by a hyphen
     slug = re.sub(r'^[0-9]+-*', '', slug)
     return slug
 
 def remove_directory(directory):
+    """
+    Remove a directory and its contents if it exists.
+
+    Args:
+        directory (str): The path to the directory to be removed.
+    """
     if os.path.exists(directory):
         logger.info(f"Removing directory: {directory}")
         shutil.rmtree(directory)
@@ -108,15 +182,21 @@ def remove_directory(directory):
         logger.debug(f"Directory does not exist: {directory}")
 
 def download_course(course_name):
+    """
+    Download a course by its name, translating sections and saving them as Markdown files.
+
+    Args:
+        course_name (str): The name of the course to download.
+    """
     # Remove 'ru' directory before starting
     remove_directory('ru')
-    
+
     aisystant = Aisystant(os.environ.get("AISYSTANT_SESSION_TOKEN"))
     course = aisystant.get_course(course_name)
     if not course:
         logger.error(f"Course with code {course_name} not found.")
         return
-    
+
     course_version_id = course["activeVersionId"]
     aisystant.start_course(course_version_id)
     passing_id = aisystant.get_passing_id(course_version_id)
